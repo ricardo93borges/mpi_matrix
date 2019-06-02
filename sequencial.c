@@ -66,6 +66,13 @@ int main(int argc, char *argv[]) {
       }
   }
 
+   for (i=0 ; i<SIZE; i++) {
+      for (j=0 ; j<SIZE; j++) {
+         printf(" %d ", mres[i][j]);
+         if (j == SIZE-1) printf("\n");
+      }
+   }
+
   // OBTEM O TEMPO
   elapsed_time += MPI_Wtime ();
 
