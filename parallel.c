@@ -201,7 +201,7 @@ int main(int argc, char *argv[]) {
             MPI_Recv(&rows, rows_per_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // REALIZA A MULTIPLICACAO            
-            # pragma omp parallel for private (i,j,k)
+            # pragma omp parallel for private (i,j)
             for (i=0 ; i<rows_per_proccess; i++) {
                 for (j=0 ; j<SIZE; j++) {
                     # pragma omp critical 
