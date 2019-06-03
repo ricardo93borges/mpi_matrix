@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/sysinfo.h>
 #include <mpi.h>
+#include <omp.h>
 
 int m1[SIZE][SIZE],m2[SIZE][SIZE],mres[SIZE][SIZE];
 int l1, c1, l2, c2, lres, cres;
@@ -65,34 +66,11 @@ int main(int argc, char *argv[]) {
             k++;
         }
 
-        //print matrix
-        /* printf("\n m1 \n");
-        for (i=0 ; i<SIZE; i++) {
-            for (j=0 ; j<SIZE; j++) {
-                printf(" %d ", m1[i][j]);
-                if (j == SIZE-1) printf("\n");
-            }
-        }
-
-        //print matrix
-        printf("\n m2 \n");
-        for (i=0 ; i<SIZE; i++) {
-            for (j=0 ; j<SIZE; j++) {
-                printf(" %d ", m2[i][j]);
-                if (j == SIZE-1) printf("\n");
-            }
-        } */
-
-        printf("\ncores: %d, nprocs: %d", get_nprocs(), nprocs);
-        printf("\nmaster - rank: %d, processor_name: %s", rank, processor_name);
-
         offset = 0;
         int slave_offset, cores;        
         while(1){
             for(n=1; n < nprocs; n++){                
-                printf("\n N: %d", n);
                 if(offset >= SIZE) {
-                    printf("\n --> STOP");
                     break;
                 }
                 //Send name
@@ -100,7 +78,6 @@ int main(int argc, char *argv[]) {
 
                 //Receive number of cores
                 MPI_Recv(&cores, 1, MPI_INT, n, 8, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                printf("\n Cores: %d", cores);
 
                 //Send second matrix
                 MPI_Send(&m2, SIZE*SIZE, MPI_INT, n, 2, MPI_COMM_WORLD);
@@ -125,19 +102,10 @@ int main(int argc, char *argv[]) {
                     k++;
                 }
 
-                /* printf("\n offset: %d \n", offset);
-                for (i=0 ; i<rows_per_proccess; i++) {
-                    for (j=0 ; j<SIZE; j++) {
-                        printf(" %d ", rows[i][j]);
-                        if (j == SIZE-1) printf("\n");
-                    }
-                } */
-
                 MPI_Send(&rows, rows_per_proccess*SIZE, MPI_INT, n, 5, MPI_COMM_WORLD);
 
                 //Receive offset
                 MPI_Recv(&slave_offset, 1, MPI_INT, n, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                //printf("\n Received offset %d from slave %d", slave_offset, n);
 
                 //Receive result
                 int res[rows_per_proccess][SIZE];
@@ -146,16 +114,7 @@ int main(int argc, char *argv[]) {
                 int f = 0;
                 MPI_Send(&f, 1, MPI_INT, n, 7, MPI_COMM_WORLD);
 
-                /* printf("\n Received result from slave %d \n", n);
-                for (i=0 ; i<rows_per_proccess; i++) {
-                    for (j=0 ; j<SIZE; j++) {
-                        printf(" %d ", res[i][j]);
-                        if (j == SIZE-1) printf("\n");
-                    }
-                } */
-
                 //Insert results into mres matrix
-                //printf("\n slave_offset: %d, rows_per_proccess: %d \n", slave_offset, rows_per_proccess);
                 for(i=0; i < rows_per_proccess; i++){
                     for(j=0; j<SIZE; j++){
                         mres[offset+i][j] = res[i][j];
@@ -163,31 +122,16 @@ int main(int argc, char *argv[]) {
                 }
 
                 offset = offset+rows_per_proccess;
-                printf("\noffset: %d", offset);
             }
             if(offset >= SIZE) {
-                int f = 1;
-                int s;
-                printf("\n -> stopping master ");
-                
+                int f = 1;                
                 //Send finish signal to slaves
                 for(n=1; n < nprocs; n++){
-                    printf("\n Sending finish signal to slave: %d", n);                    
                     MPI_Send(&f, 1, MPI_INT, n, 7, MPI_COMM_WORLD);
-                    //MPI_Recv(&s, 1, MPI_INT, n, 7, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 }
                 break;
             }
         }
-
-        //MPI_Barrier(MPI_COMM_WORLD);
-        printf("\n mres \n");
-        /* for (i=0 ; i<SIZE; i++) {
-            for (j=0 ; j<SIZE; j++) {
-                printf(" %d ", mres[i][j]);
-                if (j == SIZE-1) printf("\n");
-            }
-        } */
 
         // VERIFICA SE O RESULTADO DA MULTIPLICACAO ESTA CORRETO
         for (i=0 ; i<SIZE; i++) {
@@ -227,8 +171,6 @@ int main(int argc, char *argv[]) {
         int cores, finish;
         char slave_processor_name[MPI_MAX_PROCESSOR_NAME];
         while (1){
-            printf("\n slave %d loop", rank);
-
             //Receive name
             MPI_Recv(&processor_name, MPI_MAX_PROCESSOR_NAME, MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
@@ -241,6 +183,8 @@ int main(int argc, char *argv[]) {
             }
 
             MPI_Send(&cores, 1, MPI_INT, 0, 8, MPI_COMM_WORLD);
+
+            omp_set_num_threads(cores);
 
             //Receive sencond matrix
             MPI_Recv(&m2, SIZE*SIZE, MPI_INT, 0, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -256,14 +200,8 @@ int main(int argc, char *argv[]) {
             int msres[rows_per_proccess][SIZE];
             MPI_Recv(&rows, rows_per_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            /* printf("\n rows received: \n");
-            for (i=0 ; i<rows_per_proccess; i++) {
-                for (j=0 ; j<SIZE; j++) {
-                    printf(" %d ", rows[i][j]);
-                    if (j == SIZE-1) printf("\n");
-                }
-            } */
             // REALIZA A MULTIPLICACAO
+            # pragma omp parallel for
             for (i=0 ; i<rows_per_proccess; i++) {
                 for (j=0 ; j<SIZE; j++) {
                     msres[i][j] = 0;
@@ -272,14 +210,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-
-            /* printf("\n **** \n");
-            for (i=0 ; i<rows_per_proccess; i++) {
-                for (j=0 ; j<SIZE; j++) {
-                    printf(" %d ", msres[i][j]);
-                    if (j == SIZE-1) printf("\n");
-                }
-            } */
 
             //Send offset to master
             MPI_Send(&offset, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
@@ -300,11 +230,7 @@ int main(int argc, char *argv[]) {
             MPI_Recv(&finish, 1, MPI_INT, 0, 7, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             if(finish == 1) {
                 int s = 1;
-                printf("\n -> stopping slave %d", rank);
-                //MPI_Send(&s, 1, MPI_INT, 0, 7, MPI_COMM_WORLD); //warns the master that it will stop
                 break;
-            }else{
-                printf("\n -> continue slave %d", rank);
             }
         }
     }
