@@ -133,6 +133,14 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        printf("\n mres \n");	
+        for (i=0 ; i<SIZE; i++) {	
+            for (j=0 ; j<SIZE; j++) {	
+                printf(" %d ", mres[i][j]);	
+                if (j == SIZE-1) printf("\n");	
+            }	
+        }
+
         // VERIFICA SE O RESULTADO DA MULTIPLICACAO ESTA CORRETO
         for (i=0 ; i<SIZE; i++) {
             k = SIZE*(i+1);
@@ -201,30 +209,34 @@ int main(int argc, char *argv[]) {
             MPI_Recv(&rows, rows_per_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // REALIZA A MULTIPLICACAO
-            # pragma omp parallel for
+            
+            # pragma omp parallel for private (i,j,k)
             for (i=0 ; i<rows_per_proccess; i++) {
                 for (j=0 ; j<SIZE; j++) {
-                    msres[i][j] = 0;
-                    for (k=0 ; k<SIZE; k++) {
-                        msres[i][j] += rows[i][k] * m2[k][j];
+                    # pragma omp critical 
+                    {
+                        msres[i][j] = 0;
+                        for (k=0 ; k<SIZE; k++) {
+                            msres[i][j] += rows[i][k] * m2[k][j];
+                        }
                     }
                 }
             }
-
+        
             //Send offset to master
             MPI_Send(&offset, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
 
             //Send msres to master
             MPI_Send(&msres, rows_per_proccess*SIZE, MPI_INT, 0, 6, MPI_COMM_WORLD);
 
-            printf("\nslave - rank: %d, processor_name: %s, master_name: %s, using %d cores, offset: %d, rows_per_proccess: %d", 
+            /* printf("\nslave - rank: %d, processor_name: %s, master_name: %s, using %d cores, offset: %d, rows_per_proccess: %d", 
                 rank, 
                 slave_processor_name, 
                 processor_name, 
                 cores,
                 offset,
                 rows_per_proccess  
-            );
+            ); */
 
             //Receive finish signal
             MPI_Recv(&finish, 1, MPI_INT, 0, 7, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
