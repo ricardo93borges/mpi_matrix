@@ -133,14 +133,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        printf("\n mres \n");	
-        for (i=0 ; i<SIZE; i++) {	
-            for (j=0 ; j<SIZE; j++) {	
-                printf(" %d ", mres[i][j]);	
-                if (j == SIZE-1) printf("\n");	
-            }	
-        }
-
         // VERIFICA SE O RESULTADO DA MULTIPLICACAO ESTA CORRETO
         for (i=0 ; i<SIZE; i++) {
             k = SIZE*(i+1);
@@ -208,8 +200,7 @@ int main(int argc, char *argv[]) {
             int msres[rows_per_proccess][SIZE];
             MPI_Recv(&rows, rows_per_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            // REALIZA A MULTIPLICACAO
-            
+            // REALIZA A MULTIPLICACAO            
             # pragma omp parallel for private (i,j,k)
             for (i=0 ; i<rows_per_proccess; i++) {
                 for (j=0 ; j<SIZE; j++) {
