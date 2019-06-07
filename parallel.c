@@ -10,7 +10,7 @@ int l1, c1, l2, c2, lres, cres;
 
 int main(int argc, char *argv[]) {
 
-    int    i, j, k, n, rank, nprocs, name_len, offset, rows_per_proccess;
+    int    i, j, k, n, f, rank, nprocs, name_len, offset, rows_per_proccess;
     double elapsed_time;
 
     MPI_Init(&argc,&argv);
@@ -70,10 +70,14 @@ int main(int argc, char *argv[]) {
         offset = 0;
         int slave_offset, cores;        
         while(1){
-            for(n=1; n < nprocs; n++){                
+            for(n=1; n < nprocs; n++){
+                int f = 0;
+                MPI_Bcast (&f, 1, MPI_INT , 0 , MPI_COMM_WORLD );
+
                 if(offset >= SIZE) {
                     break;
                 }
+
                 //Send name
                 MPI_Send(&processor_name, MPI_MAX_PROCESSOR_NAME, MPI_UNSIGNED_CHAR, n, 1, MPI_COMM_WORLD);
 
@@ -112,9 +116,6 @@ int main(int argc, char *argv[]) {
                 int res[rows_per_proccess][SIZE];
                 MPI_Recv(&res, rows_per_proccess*SIZE, MPI_INT, n, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                int f = 0;
-                MPI_Send(&f, 1, MPI_INT, n, 7, MPI_COMM_WORLD);
-
                 //Insert results into mres matrix
                 for(i=0; i < rows_per_proccess; i++){
                     for(j=0; j<SIZE; j++){
@@ -124,12 +125,11 @@ int main(int argc, char *argv[]) {
 
                 offset = offset+rows_per_proccess;
             }
+
             if(offset >= SIZE) {
-                int f = 1;                
-                //Send finish signal to slaves
-                for(n=1; n < nprocs; n++){
-                    MPI_Send(&f, 1, MPI_INT, n, 7, MPI_COMM_WORLD);
-                }
+                int f = 1;
+                MPI_Bcast (&f, 1, MPI_INT , 0 , MPI_COMM_WORLD );
+                printf("\n finishing root");
                 break;
             }
         }
@@ -141,26 +141,34 @@ int main(int argc, char *argv[]) {
                 int k_col = k*(j+1);
                 if (i % 2 ==0) {
                     if (j % 2 == 0) {
-                        if (mres[i][j]!=k_col)
-                        MPI_Finalize();
-                        return 1;
+                        if (mres[i][j]!=k_col){
+                            printf("\nF1");
+                            MPI_Finalize();
+                            return 1;
+                        }
                     }
                     else {
-                        if (mres[i][j]!=-k_col)
-                        MPI_Finalize();
-                        return 1;
+                        if (mres[i][j]!=-k_col){
+                            printf("\nF2");
+                            MPI_Finalize();
+                            return 1;
+                        }
                     }
                 }
                 else {
                     if (j % 2 == 0) {
-                        if (mres[i][j]!=-k_col)
-                        MPI_Finalize();
-                        return 1;
+                        if (mres[i][j]!=-k_col){
+                            printf("\nF3");
+                            MPI_Finalize();
+                            return 1;
+                        }
                     }
                     else {
-                        if (mres[i][j]!=k_col)
-                        MPI_Finalize();
-                        return 1;
+                        if (mres[i][j]!=k_col){
+                            printf("\nF4");
+                            MPI_Finalize();
+                            return 1;
+                        }
                     }
                 }
             } 
@@ -176,6 +184,14 @@ int main(int argc, char *argv[]) {
         int cores, finish;
         char slave_processor_name[MPI_MAX_PROCESSOR_NAME];
         while (1){
+
+            //Receive finish signal
+            MPI_Bcast (&finish, 1, MPI_INT , 0 , MPI_COMM_WORLD);
+            printf("\n rank %d received finish %d", rank, finish);
+            if(finish == 1) {
+                break;
+            }
+
             //Receive name
             MPI_Recv(&processor_name, MPI_MAX_PROCESSOR_NAME, MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
@@ -225,23 +241,18 @@ int main(int argc, char *argv[]) {
             //Send msres to master
             MPI_Send(&msres, rows_per_proccess*SIZE, MPI_INT, 0, 6, MPI_COMM_WORLD);
 
-            /* printf("\nslave - rank: %d, processor_name: %s, master_name: %s, using %d cores, offset: %d, rows_per_proccess: %d", 
-                rank, 
-                slave_processor_name, 
-                processor_name, 
+            printf("\nslave - rank: %d, processor_name: %s, master_name: %s, using %d cores, offset: %d, rows_per_proccess: %d", 
+                rank,
+                slave_processor_name,
+                processor_name,
                 cores,
                 offset,
-                rows_per_proccess  
-            ); */
-
-            //Receive finish signal
-            MPI_Recv(&finish, 1, MPI_INT, 0, 7, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            if(finish == 1) {
-                int s = 1;
-                break;
-            }
+                rows_per_proccess
+            );    
         }
     }
+
+    printf("\n >> Rank %d finalizing", rank);
 
     MPI_Finalize();
     return 0;
