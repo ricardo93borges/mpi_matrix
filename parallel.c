@@ -8,6 +8,79 @@
 int m1[SIZE][SIZE],m2[SIZE][SIZE],mres[SIZE][SIZE];
 int l1, c1, l2, c2, lres, cres;
 
+void initializeMatrices() {
+    int i, j, k;
+
+    l1 = c1 = SIZE;
+    l2 = c2 = SIZE;
+    lres = l1;
+    cres = c2;
+    k=1;
+    for (i=0 ; i<SIZE; i++) {
+        for (j=0 ; j<SIZE; j++) {
+            if (k%2==0)
+                m1[i][j] = -k;
+            else
+                m1[i][j] = k;
+        }
+        k++;
+    }
+    
+    k=1;
+    for (j=0 ; j<SIZE; j++) {
+        for (i=0 ; i<SIZE; i++) {
+            if (k%2==0)
+                m2[i][j] = -k;
+            else
+                m2[i][j] = k;
+        }
+        k++;
+    }
+}
+
+int validateMatrix(){
+    int i, j, k;
+    for (i=0 ; i<SIZE; i++) {
+        k = SIZE*(i+1);
+        for (j=0 ; j<SIZE; j++) {
+            int k_col = k*(j+1);
+            if (i % 2 ==0) {
+                if (j % 2 == 0) {
+                    if (mres[i][j]!=k_col){
+                        printf("\nF1");
+                        MPI_Finalize();
+                        return 0;
+                    }
+                }
+                else {
+                    if (mres[i][j]!=-k_col){
+                        printf("\nF2");
+                        MPI_Finalize();
+                        return 0;
+                    }
+                }
+            }
+            else {
+                if (j % 2 == 0) {
+                    if (mres[i][j]!=-k_col){
+                        printf("\nF3");
+                        MPI_Finalize();
+                        return 0;
+                    }
+                }
+                else {
+                    if (mres[i][j]!=k_col){
+                        printf("\nF4");
+                        MPI_Finalize();
+                        return 0;
+                    }
+                }
+            }
+        } 
+    }
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
 
     int    i, j, k, n, f, rank, nprocs, name_len, offset, rows_per_proccess;
@@ -35,7 +108,7 @@ int main(int argc, char *argv[]) {
          *  7 - send finish signal
          *  8 - send number of cores (from slave to master)
         **/
-        // INICIALIZA OS ARRAYS A SEREM MULTIPLICADOS
+
         l1 = c1 = SIZE;
         l2 = c2 = SIZE;
         if (c1 != l2) {
@@ -43,29 +116,9 @@ int main(int argc, char *argv[]) {
             MPI_Finalize();
             return 1;
         }
-        lres = l1;
-        cres = c2;
-        k=1;
-        for (i=0 ; i<SIZE; i++) {
-            for (j=0 ; j<SIZE; j++) {
-                if (k%2==0)
-                    m1[i][j] = -k;
-                else
-                    m1[i][j] = k;
-            }
-            k++;
-        }
         
-        k=1;
-        for (j=0 ; j<SIZE; j++) {
-            for (i=0 ; i<SIZE; i++) {
-                if (k%2==0)
-                    m2[i][j] = -k;
-                else
-                    m2[i][j] = k;
-            }
-            k++;
-        }
+        // INICIALIZA OS ARRAYS A SEREM MULTIPLICADOS
+        initializeMatrices();
 
         offset = 0;
         int slave_offset, cores;        
@@ -74,9 +127,7 @@ int main(int argc, char *argv[]) {
                 int f = 0;
                 MPI_Bcast (&f, 1, MPI_INT , 0 , MPI_COMM_WORLD );
 
-                if(offset >= SIZE) {
-                    break;
-                }
+                if(offset >= SIZE) break;
 
                 //Send name
                 MPI_Send(&processor_name, MPI_MAX_PROCESSOR_NAME, MPI_UNSIGNED_CHAR, n, 1, MPI_COMM_WORLD);
@@ -135,43 +186,9 @@ int main(int argc, char *argv[]) {
         }
 
         // VERIFICA SE O RESULTADO DA MULTIPLICACAO ESTA CORRETO
-        for (i=0 ; i<SIZE; i++) {
-            k = SIZE*(i+1);
-            for (j=0 ; j<SIZE; j++) {
-                int k_col = k*(j+1);
-                if (i % 2 ==0) {
-                    if (j % 2 == 0) {
-                        if (mres[i][j]!=k_col){
-                            printf("\nF1");
-                            MPI_Finalize();
-                            return 1;
-                        }
-                    }
-                    else {
-                        if (mres[i][j]!=-k_col){
-                            printf("\nF2");
-                            MPI_Finalize();
-                            return 1;
-                        }
-                    }
-                }
-                else {
-                    if (j % 2 == 0) {
-                        if (mres[i][j]!=-k_col){
-                            printf("\nF3");
-                            MPI_Finalize();
-                            return 1;
-                        }
-                    }
-                    else {
-                        if (mres[i][j]!=k_col){
-                            printf("\nF4");
-                            MPI_Finalize();
-                            return 1;
-                        }
-                    }
-                }
-            } 
+        if(!validateMatrix()){
+            MPI_Finalize();
+            return 1;
         }
 
         // OBTEM O TEMPO
