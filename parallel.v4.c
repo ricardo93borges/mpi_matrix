@@ -5,10 +5,8 @@
 #include <mpi.h>
 #include <omp.h>
 
-int m1[SIZE][SIZE],m2[SIZE][SIZE],mres[SIZE][SIZE];
+int m1[SIZE][SIZE],m2[SIZE][SIZE],mres[SIZE][SIZE],finalized_process[4];
 int l1, c1, l2, c2, lres, cres;
-
-int finalized_process[4];
 
 void initializeMatrices() {
     int i, j, k;
@@ -83,50 +81,32 @@ int validateMatrix(){
     return 1;
 }
 
-int finalize(int offset, int rows_per_proccess, int cores, int nprocs, int rank) {
-    if(rows_per_proccess == 0) {
-        printf("\n %d - break 1", rank);
-        return 1;
-    }
+int finalize(int offset, int rows_to_proccess, int cores, int nprocs, int rank) {
+    if(rows_to_proccess == 0) return 1;
 
-    if(rows_per_proccess < cores) {
-        printf("\n %d - break 2", rank);
-        return 1;
-    }
+    if(rows_to_proccess < cores) return 1;
 
-    if(SIZE-(offset+rows_per_proccess) < cores && nprocs > 2) {
-        printf("\n %d  break 3 - offset: %d, rows_per_proccess: %d, cores: %d, nprocs: %d", rank, offset, rows_per_proccess, cores, nprocs);
-        return 1;
-    }
+    if(SIZE-(offset+rows_to_proccess) < cores && nprocs > 2) return 1;
 
     return 0;
 }
 
 int is_finished(int rank) {
-    printf("\n is_finished %d = %d", rank, finalized_process[rank]);
-    if(finalized_process[rank] != 0){
-        return 1;
-    }
+    if(finalized_process[rank] != 0) return 1;
     return 0;
 }
 
 int all_finished(int nprocs) {
-    int i;
+    int i;    
     for(i=1; i < nprocs; i++) {
-        printf("\n ::finalized_process[%d] = %d", i, finalized_process[i]);
-    }
-    
-    for(i=1; i < nprocs; i++) {
-        if(finalized_process[i] == 0){
-            return 0;
-        }
+        if(finalized_process[i] == 0) return 0;
     }
     return 1;
 }
 
 int main(int argc, char *argv[]) {
 
-    int    i, j, k, n, f, rank, nprocs, name_len, offset, s_offset, rows_per_proccess, finish;
+    int    i, j, k, n, f, rank, nprocs, name_len, offset, s_offset, rows_to_proccess, finish;
     double elapsed_time;
 
     MPI_Init(&argc,&argv);
@@ -139,11 +119,15 @@ int main(int argc, char *argv[]) {
     // PREPARA PARA MEDIR TEMPO
     elapsed_time = - MPI_Wtime ();
 
+    //Initialize finalized_process array
     for(i=0; i < 4; i++) finalized_process[i] = 0;
+    
+    //Initialize matrices
+    initializeMatrices();
 
     offset = 0;
     s_offset = 0;
-    while(1) {        
+    while(1) {
         
         if(rank == 0) {
             if(all_finished(nprocs)) break;
@@ -151,10 +135,8 @@ int main(int argc, char *argv[]) {
             for(n=1; n < nprocs; n++){
                 int slave_offset, cores;
 
-                if(is_finished(n)) {
-                    printf("\n %d is finished so continue", n);
-                    continue;
-                }
+                //Go to next process if this one is already finished
+                if(is_finished(n)) continue;
 
                 //Send finish
                 finish = 0;
@@ -174,53 +156,53 @@ int main(int argc, char *argv[]) {
 
                 //Send rows per proccess
                 if(offset >= SIZE){
-                    rows_per_proccess = 0;
+                    rows_to_proccess = 0;
                 }else if(offset+cores > SIZE){
-                    rows_per_proccess = SIZE-offset;
+                    rows_to_proccess = SIZE-offset;
                 }else{
-                    rows_per_proccess = cores;
+                    rows_to_proccess = cores;
                 }
-                int rows[rows_per_proccess][SIZE];
+                int rows[rows_to_proccess][SIZE];
                 
-                //if(offset >= SIZE) rows_per_proccess = 0;
-                printf("\n Sending rows_per_proccess = %d to %d", rows_per_proccess, n);
-                MPI_Send(&rows_per_proccess, 1, MPI_INT, n, 4, MPI_COMM_WORLD);
+                MPI_Send(&rows_to_proccess, 1, MPI_INT, n, 4, MPI_COMM_WORLD);
 
-                if(rows_per_proccess == 0) {
+                //Go to next process if there are no rows to process
+                if(rows_to_proccess == 0) {
                     finalized_process[n] = n;
                     continue;
                 }
 
                 //Send first matrix rows                
                 k = 0;
-                for(i=offset; i < (offset+rows_per_proccess); i++){
+                for(i=offset; i < (offset+rows_to_proccess); i++){
                     for(j=0; j<SIZE; j++){
                         rows[k][j] = m1[i][j];                    
                     }
                     k++;
                 }
 
-                MPI_Send(&rows, rows_per_proccess*SIZE, MPI_INT, n, 5, MPI_COMM_WORLD);
+                MPI_Send(&rows, rows_to_proccess*SIZE, MPI_INT, n, 5, MPI_COMM_WORLD);
 
                 //Receive offset
                 MPI_Recv(&slave_offset, 1, MPI_INT, n, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                 //Receive result
-                int res[rows_per_proccess][SIZE];
-                MPI_Recv(&res, rows_per_proccess*SIZE, MPI_INT, n, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                int res[rows_to_proccess][SIZE];
+                MPI_Recv(&res, rows_to_proccess*SIZE, MPI_INT, n, 6, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                 //Insert results into mres matrix
-                for(i=0; i < rows_per_proccess; i++){
+                for(i=0; i < rows_to_proccess; i++){
                     for(j=0; j<SIZE; j++){
                         mres[offset+i][j] = res[i][j];
                     }
                 }
 
-                if(finalize(offset, rows_per_proccess, cores, nprocs, n) == 1) {
+                if(finalize(offset, rows_to_proccess, cores, nprocs, n) == 1) {
                     finalized_process[n] = n;
                 }
 
-                offset = offset+rows_per_proccess;              
+                //update offset
+                offset = offset+rows_to_proccess;             
             }
         }
         
@@ -250,21 +232,19 @@ int main(int argc, char *argv[]) {
             MPI_Recv(&offset, 1, MPI_INT, 0, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             //Receive rows per proccess
-            MPI_Recv(&rows_per_proccess, 1, MPI_INT, 0, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&rows_to_proccess, 1, MPI_INT, 0, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            if(rows_per_proccess == 0) {
-                printf("\n rank %d break cause recv rows_per_proccess = 0", rank);
-                break;
-            }
+            //Break if has no rows to process
+            if(rows_to_proccess == 0) break;
             
             //Receive first matrix rows
-            int rows[rows_per_proccess][SIZE];
-            int msres[rows_per_proccess][SIZE];
-            MPI_Recv(&rows, rows_per_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            int rows[rows_to_proccess][SIZE];
+            int msres[rows_to_proccess][SIZE];
+            MPI_Recv(&rows, rows_to_proccess*SIZE, MPI_INT, 0, 5, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // REALIZA A MULTIPLICACAO            
             # pragma omp parallel for private (i,j)
-            for (i=0 ; i<rows_per_proccess; i++) {
+            for (i=0 ; i<rows_to_proccess; i++) {
                 for (j=0 ; j<SIZE; j++) {
                     # pragma omp critical 
                     {
@@ -275,28 +255,32 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-        
+
             //Send offset to master
             MPI_Send(&offset, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
 
             //Send msres to master
-            MPI_Send(&msres, rows_per_proccess*SIZE, MPI_INT, 0, 6, MPI_COMM_WORLD);
+            MPI_Send(&msres, rows_to_proccess*SIZE, MPI_INT, 0, 6, MPI_COMM_WORLD);
 
-            /* printf("\nslave - rank: %d, processor_name: %s, master_name: %s, using %d cores, offset: %d, rows_per_proccess: %d", 
-                rank,
-                slave_processor_name,
-                processor_name,
-                cores,
-                offset,
-                rows_per_proccess
-            ); */
-
-            if(finalize(offset, rows_per_proccess, cores, nprocs, rank) == 1) break;
+            if(finalize(offset, rows_to_proccess, cores, nprocs, rank) == 1) break;
         }
     }
 
-    printf("\n >> Rank %d finalizing", rank);
-    MPI_Finalize();
+    if(rank == 0){        
+        // VERIFICA SE O RESULTADO DA MULTIPLICACAO ESTA CORRETO
+        validateMatrix();
+
+        // OBTEM O TEMPO
+        elapsed_time += MPI_Wtime ();
+
+        // MOSTRA O TEMPO DE EXECUCAO
+        printf("\n > elapsed_time: %lf",elapsed_time);
+        printf("\n > Rank %d finalizing \n", rank);        
+    }else{
+        printf("\n > Rank %d finalizing \n", rank);
+        MPI_Finalize();
+    }
+
     return 0;
 }
 
